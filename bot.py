@@ -89,46 +89,58 @@ async def fetch_number_info(mobile):
     with ThreadPoolExecutor() as executor:
         return await loop.run_in_executor(executor, fetch_number_info_sync, mobile)
 
-# FORMAT RESPONSE - BEAUTIFUL
+# FORMAT RESPONSE - ATTRACTIVE
 def format_response(data, mobile):
     if not data:
         return "❌ No data found for this number!"
     
-    response = f"📱 *Number Information* 📱\n"
-    response += f"━━━━━━━━━━━━━━━━━━━━━\n"
-    response += f"📞 *Number:* `{mobile}`\n\n"
+    # Agar response mein 'response' key hai toh usme se data lo
+    if isinstance(data, dict) and 'response' in data:
+        actual_data = data['response']
+        if isinstance(actual_data, dict):
+            data = actual_data
+        else:
+            data = data
     
-    # Agar data dict hai
-    if isinstance(data, dict):
-        # Important fields ko pehle dikhao
-        important = ['name', 'operator', 'circle', 'state', 'city', 'carrier', 'location', 'type']
-        
-        for key in important:
-            if key in data and data[key]:
-                emoji = "👤" if key == 'name' else "📡" if key in ['operator', 'carrier'] else "📍" if key in ['circle', 'state', 'city', 'location'] else "📌"
-                response += f"{emoji} *{key.title()}:* {data[key]}\n"
-        
-        # Baaki fields
-        for key, value in data.items():
-            if key not in important and value and key not in ['mobile', 'number']:
-                response += f"📌 *{key.replace('_', ' ').title()}:* {value}\n"
+    response = f"📱 *┏━━━━━━━━━━━━━━━━━━━━┓*\n"
+    response += f"*┃ 📞 NUMBER DETAILS* \n"
+    response += f"*┗━━━━━━━━━━━━━━━━━━━━┛*\n\n"
     
-    # Agar data list hai
-    elif isinstance(data, list):
-        for item in data:
-            if isinstance(item, dict):
-                for key, value in item.items():
-                    if value:
-                        response += f"📌 *{key.replace('_', ' ').title()}:* {value}\n"
-            else:
-                response += f"📌 {item}\n"
+    response += f"╭───────────────────╮\n"
+    response += f"│ 📱 *Number* │ `{mobile}`\n"
+    response += f"╰───────────────────╯\n\n"
     
-    # Agar string hai
-    else:
-        response += f"📌 {data}\n"
+    # Important fields with emojis
+    field_map = {
+        'name': '👤 *Name*',
+        'fname': '👨 *Father Name*',
+        'address': '📍 *Address*',
+        'alt': '📞 *Alternate Number*',
+        'circle': '📡 *Circle*',
+        'id': '🆔 *ID*',
+        'email': '📧 *Email*',
+        'city': '🏙️ *City*',
+        'state': '🏛️ *State*',
+        'pincode': '📮 *Pincode*',
+        'operator': '📶 *Operator*',
+        'carrier': '📶 *Carrier*',
+        'type': '📌 *Type*',
+        'location': '📍 *Location*'
+    }
     
-    response += f"\n━━━━━━━━━━━━━━━━━━━━━\n"
-    response += f"{DEV_TAG}"
+    for key, value in data.items():
+        if value and key not in ['mobile', 'number', 'success', 'response']:
+            display_key = field_map.get(key, f"📌 *{key.replace('_', ' ').title()}*")
+            # Clean address
+            if key == 'address' and isinstance(value, str):
+                value = value.replace('!', ', ').replace('  ', ' ')
+                if len(value) > 50:
+                    value = value[:50] + '...'
+            response += f"│ {display_key} │ {value}\n"
+    
+    response += f"\n╭───────────────────╮\n"
+    response += f"│ 👨‍💻 *Owner* │ {DEV_TAG}\n"
+    response += f"╰───────────────────╯\n"
     
     return response
 
@@ -137,26 +149,42 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     if not get_user(user.id):
         create_user(user.id, user.username, user.first_name)
-        msg = f"""🎉 *Welcome {user.first_name}!* 🎉
+        msg = f"""🌟 *┏━━━━━━━━━━━━━━━━━━━━┓* 🌟
+*┃ WELCOME TO* 
+*┃ NUMBER INFO BOT* 
+*┗━━━━━━━━━━━━━━━━━━━━┛*
 
-⭐ You got *5 FREE credits*!
-🔍 Each search costs 1 credit
+╭───────────────────╮
+│ 👋 *Hello {user.first_name}!* │
+╰───────────────────╯
 
-📱 *Send any mobile number* to get information
+⭐ *You got 5 FREE credits!*
+🔍 *1 credit = 1 search*
 
-💎 *Premium:* Unlimited searches
+💎 *Premium = Unlimited searches*
 
+📱 *Send any mobile number* 
+   to get instant info!
+
+━━━━━━━━━━━━━━━━
 👨‍💻 {DEV_TAG}"""
     else:
         data = get_user(user.id)
-        msg = f"""👋 *Welcome back {user.first_name}!*
+        msg = f"""🌟 *┏━━━━━━━━━━━━━━━━━━━━┓* 🌟
+*┃ WELCOME BACK* 
+*┃ {user.first_name}* 
+*┗━━━━━━━━━━━━━━━━━━━━┛*
 
-⭐ *Credits:* {data[3]}
-💎 *Premium:* {'✅ Active' if data[4] else '❌ Inactive'}
-🔍 *Total Searches:* {data[5]}
+╭───────────────────╮
+│ ⭐ *Credits:* {data[3]} │
+│ 💎 *Premium:* {'✅ Active' if data[4] else '❌ Inactive'} │
+│ 🔍 *Searches:* {data[5]} │
+╰───────────────────╯
 
-📱 *Send any mobile number* to search
+📱 *Send any mobile number* 
+   to get instant info!
 
+━━━━━━━━━━━━━━━━
 👨‍💻 {DEV_TAG}"""
     
     keyboard = [
@@ -171,13 +199,18 @@ async def stats_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
     data = get_user(user_id)
     if data:
-        msg = f"""📊 *Your Statistics* 📊
+        msg = f"""📊 *┏━━━━━━━━━━━━━━━━━━━━┓*
+*┃ YOUR STATISTICS* 
+*┗━━━━━━━━━━━━━━━━━━━━┛*
 
-⭐ *Credits:* {data[3]}
-💎 *Premium:* {'✅ Active' if data[4] else '❌ Inactive'}
-🔍 *Total Searches:* {data[5]}
-📅 *Joined:* {data[6]}
+╭───────────────────╮
+│ ⭐ *Credits:* {data[3]} │
+│ 💎 *Premium:* {'✅ Active' if data[4] else '❌ Inactive'} │
+│ 🔍 *Searches:* {data[5]} │
+│ 📅 *Joined:* {data[6]} │
+╰───────────────────╯
 
+━━━━━━━━━━━━━━━━
 👨‍💻 {DEV_TAG}"""
     else:
         msg = "❌ User not found!"
@@ -186,24 +219,29 @@ async def stats_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def about_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    msg = f"""🤖 *About Number Info Bot*
+    msg = f"""🤖 *┏━━━━━━━━━━━━━━━━━━━━┓*
+*┃ ABOUT BOT* 
+*┗━━━━━━━━━━━━━━━━━━━━┛*
 
-Get detailed information about any mobile number.
+╭───────────────────╮
+│ 📱 *Number Info Bot* │
+│ │
+│ ✨ *Features:* │
+│ • Mobile number lookup │
+│ • Credit system │
+│ • Premium users │
+│ • Daily free credits │
+│ │
+│ 📱 *How to use:* │
+│ Send any mobile number │
+╰───────────────────╯
 
-✨ *Features:*
-• Mobile number lookup
-• Credit system (5 free credits)
-• Premium users (unlimited)
-• Daily free credits
-
-📱 *How to use:*
-Simply send any mobile number
-
+━━━━━━━━━━━━━━━━
 👨‍💻 *Developer:* {DEV_TAG}
 
 *Commands:*
 /start - Start bot
-/admin - Admin panel (Admin only)"""
+/admin - Admin panel"""
     await query.edit_message_text(msg, parse_mode=ParseMode.MARKDOWN)
 
 async def handle_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -220,7 +258,18 @@ async def handle_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data = get_user(user_id)
     
     if not user_data[4] and user_data[3] <= 0:
-        await update.message.reply_text(f"❌ *Insufficient Credits!*\n⭐ Credits: {user_data[3]}\nContact admin or wait for daily reset.\n\n{DEV_TAG}", parse_mode=ParseMode.MARKDOWN)
+        await update.message.reply_text(f"""❌ *Insufficient Credits!*
+
+╭───────────────────╮
+│ ⭐ *Credits:* {user_data[3]} │
+│ 💎 *Upgrade to Premium* │
+│   for unlimited searches! │
+╰───────────────────╯
+
+Contact admin or wait for daily reset.
+
+━━━━━━━━━━━━━━━━
+👨‍💻 {DEV_TAG}""", parse_mode=ParseMode.MARKDOWN)
         return
     
     # Send typing indicator
@@ -239,13 +288,20 @@ async def handle_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Add credits info
         credits = user_data[3] - 1 if not user_data[4] else "♾️"
-        response += f"\n\n⭐ *Credits Left:* {credits}"
+        response += f"\n\n╭───────────────────╮\n"
+        response += f"│ ⭐ *Credits:* {credits} │"
         if user_data[4]:
-            response += " (Premium)"
+            response += f" (✨ Premium) │"
+        response += f"\n╰───────────────────╯\n"
         
         await update.message.reply_text(response, parse_mode=ParseMode.MARKDOWN)
     else:
-        await update.message.reply_text(f"❌ *Error fetching data!*\nPlease try again later.\n\n{DEV_TAG}", parse_mode=ParseMode.MARKDOWN)
+        await update.message.reply_text(f"""❌ *Error fetching data!*
+
+Please try again later.
+
+━━━━━━━━━━━━━━━━
+👨‍💻 {DEV_TAG}""", parse_mode=ParseMode.MARKDOWN)
 
 # ADMIN
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -273,14 +329,16 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not users:
             await query.edit_message_text("❌ No users found!")
             return
-        msg = "👥 *All Users*\n━━━━━━━━━━━━━━━━━\n"
+        msg = "👥 *┏━━━━━━━━━━━━━━━━━━━━┓*\n*┃ ALL USERS* \n*┗━━━━━━━━━━━━━━━━━━━━┛*\n\n"
         for u in users[:20]:
-            msg += f"• *{u[2]}*\n"
-            msg += f"  ├ ID: `{u[0]}`\n"
-            msg += f"  ├ Credits: {u[3]}\n"
-            msg += f"  ├ Premium: {'✅' if u[4] else '❌'}\n"
-            msg += f"  └ Searches: {u[5]}\n\n"
-        msg += f"━━━━━━━━━━━━━━━━━\nTotal: {len(users)} users\n{DEV_TAG}"
+            msg += f"╭───────────────────╮\n"
+            msg += f"│ 👤 *{u[2]}*\n"
+            msg += f"│ ├ ID: `{u[0]}`\n"
+            msg += f"│ ├ Credits: {u[3]}\n"
+            msg += f"│ ├ Premium: {'✅' if u[4] else '❌'}\n"
+            msg += f"│ └ Searches: {u[5]}\n"
+            msg += f"╰───────────────────╯\n\n"
+        msg += f"━━━━━━━━━━━━━━━━\n*Total:* {len(users)} users\n\n👨‍💻 {DEV_TAG}"
         await query.edit_message_text(msg, parse_mode=ParseMode.MARKDOWN)
     
     elif query.data == "admin_stats":
@@ -289,18 +347,23 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         premium = sum(1 for u in users if u[4])
         searches = sum(u[5] for u in users)
         credits = sum(u[3] for u in users)
-        msg = f"""📊 *Bot Statistics* 📊
-━━━━━━━━━━━━━━━━━
-👥 *Total Users:* {total}
-💎 *Premium Users:* {premium}
-🔍 *Total Searches:* {searches}
-⭐ *Total Credits:* {credits}
-━━━━━━━━━━━━━━━━━
-{DEV_TAG}"""
+        msg = f"""📊 *┏━━━━━━━━━━━━━━━━━━━━┓*
+*┃ BOT STATISTICS* 
+*┗━━━━━━━━━━━━━━━━━━━━┛*
+
+╭───────────────────╮
+│ 👥 *Users:* {total} │
+│ 💎 *Premium:* {premium} │
+│ 🔍 *Searches:* {searches} │
+│ ⭐ *Credits:* {credits} │
+╰───────────────────╯
+
+━━━━━━━━━━━━━━━━
+👨‍💻 {DEV_TAG}"""
         await query.edit_message_text(msg, parse_mode=ParseMode.MARKDOWN)
     
     elif query.data == "admin_credits":
-        msg = f"""💰 *Add Credits* 💰
+        msg = f"""💰 *Add Credits*
 
 Use command:
 `/addcredits [user_id] [amount]`
@@ -308,11 +371,12 @@ Use command:
 Example:
 `/addcredits 123456789 10`
 
-{DEV_TAG}"""
+━━━━━━━━━━━━━━━━
+👨‍💻 {DEV_TAG}"""
         await query.edit_message_text(msg, parse_mode=ParseMode.MARKDOWN)
     
     elif query.data == "admin_premium":
-        msg = f"""💎 *Premium Management* 💎
+        msg = f"""💎 *Premium Management*
 
 Use command:
 `/premium [user_id] [on/off]`
@@ -321,7 +385,8 @@ Example:
 `/premium 123456789 on`
 `/premium 123456789 off`
 
-{DEV_TAG}"""
+━━━━━━━━━━━━━━━━
+👨‍💻 {DEV_TAG}"""
         await query.edit_message_text(msg, parse_mode=ParseMode.MARKDOWN)
 
 async def add_credits(update: Update, context: ContextTypes.DEFAULT_TYPE):
