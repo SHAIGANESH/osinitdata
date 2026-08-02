@@ -47,6 +47,7 @@ def init_db():
                   timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
     conn.commit()
     conn.close()
+    logging.info("✅ Database initialized")
 
 init_db()
 
