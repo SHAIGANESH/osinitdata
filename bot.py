@@ -4,7 +4,8 @@ import asyncio
 import requests
 import sqlite3
 import re
-from datetime import datetime, timedelta
+import json
+from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 from telegram.constants import ParseMode
@@ -88,17 +89,80 @@ async def fetch_number_info(mobile):
     with ThreadPoolExecutor() as executor:
         return await loop.run_in_executor(executor, fetch_number_info_sync, mobile)
 
+# FORMAT RESPONSE - BEAUTIFUL
+def format_response(data, mobile):
+    if not data:
+        return "❌ No data found for this number!"
+    
+    response = f"📱 *Number Information* 📱\n"
+    response += f"━━━━━━━━━━━━━━━━━━━━━\n"
+    response += f"📞 *Number:* `{mobile}`\n\n"
+    
+    # Agar data dict hai
+    if isinstance(data, dict):
+        # Important fields ko pehle dikhao
+        important = ['name', 'operator', 'circle', 'state', 'city', 'carrier', 'location', 'type']
+        
+        for key in important:
+            if key in data and data[key]:
+                emoji = "👤" if key == 'name' else "📡" if key in ['operator', 'carrier'] else "📍" if key in ['circle', 'state', 'city', 'location'] else "📌"
+                response += f"{emoji} *{key.title()}:* {data[key]}\n"
+        
+        # Baaki fields
+        for key, value in data.items():
+            if key not in important and value and key not in ['mobile', 'number']:
+                response += f"📌 *{key.replace('_', ' ').title()}:* {value}\n"
+    
+    # Agar data list hai
+    elif isinstance(data, list):
+        for item in data:
+            if isinstance(item, dict):
+                for key, value in item.items():
+                    if value:
+                        response += f"📌 *{key.replace('_', ' ').title()}:* {value}\n"
+            else:
+                response += f"📌 {item}\n"
+    
+    # Agar string hai
+    else:
+        response += f"📌 {data}\n"
+    
+    response += f"\n━━━━━━━━━━━━━━━━━━━━━\n"
+    response += f"{DEV_TAG}"
+    
+    return response
+
 # COMMANDS
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     if not get_user(user.id):
         create_user(user.id, user.username, user.first_name)
-        msg = f"🎉 Welcome {user.first_name}!\n⭐ You got 5 free credits!\nSend any number to search.\n\n{DEV_TAG}"
+        msg = f"""🎉 *Welcome {user.first_name}!* 🎉
+
+⭐ You got *5 FREE credits*!
+🔍 Each search costs 1 credit
+
+📱 *Send any mobile number* to get information
+
+💎 *Premium:* Unlimited searches
+
+👨‍💻 {DEV_TAG}"""
     else:
         data = get_user(user.id)
-        msg = f"👋 Welcome back {user.first_name}!\n⭐ Credits: {data[3]}\n💎 Premium: {'✅' if data[4] else '❌'}\n🔍 Total Searches: {data[5]}\n\nSend any number to search.\n\n{DEV_TAG}"
+        msg = f"""👋 *Welcome back {user.first_name}!*
+
+⭐ *Credits:* {data[3]}
+💎 *Premium:* {'✅ Active' if data[4] else '❌ Inactive'}
+🔍 *Total Searches:* {data[5]}
+
+📱 *Send any mobile number* to search
+
+👨‍💻 {DEV_TAG}"""
     
-    keyboard = [[InlineKeyboardButton("📊 Stats", callback_data="stats")]]
+    keyboard = [
+        [InlineKeyboardButton("📊 My Stats", callback_data="stats")],
+        [InlineKeyboardButton("ℹ️ About", callback_data="about")]
+    ]
     await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def stats_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -107,9 +171,39 @@ async def stats_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
     data = get_user(user_id)
     if data:
-        msg = f"📊 Your Stats:\n⭐ Credits: {data[3]}\n💎 Premium: {'✅' if data[4] else '❌'}\n🔍 Searches: {data[5]}\n📅 Joined: {data[6]}\n\n{DEV_TAG}"
+        msg = f"""📊 *Your Statistics* 📊
+
+⭐ *Credits:* {data[3]}
+💎 *Premium:* {'✅ Active' if data[4] else '❌ Inactive'}
+🔍 *Total Searches:* {data[5]}
+📅 *Joined:* {data[6]}
+
+👨‍💻 {DEV_TAG}"""
     else:
         msg = "❌ User not found!"
+    await query.edit_message_text(msg, parse_mode=ParseMode.MARKDOWN)
+
+async def about_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    msg = f"""🤖 *About Number Info Bot*
+
+Get detailed information about any mobile number.
+
+✨ *Features:*
+• Mobile number lookup
+• Credit system (5 free credits)
+• Premium users (unlimited)
+• Daily free credits
+
+📱 *How to use:*
+Simply send any mobile number
+
+👨‍💻 *Developer:* {DEV_TAG}
+
+*Commands:*
+/start - Start bot
+/admin - Admin panel (Admin only)"""
     await query.edit_message_text(msg, parse_mode=ParseMode.MARKDOWN)
 
 async def handle_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -117,7 +211,7 @@ async def handle_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
     mobile = update.message.text.strip()
     
     if not re.match(r'^\+?\d{10,15}$', mobile):
-        await update.message.reply_text("❌ Invalid number! Send 10-15 digits.\nExample: `9720294892`", parse_mode=ParseMode.MARKDOWN)
+        await update.message.reply_text("❌ *Invalid number!*\nSend 10-15 digits.\nExample: `9720294892`", parse_mode=ParseMode.MARKDOWN)
         return
     
     user_data = get_user(user_id)
@@ -126,39 +220,44 @@ async def handle_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data = get_user(user_id)
     
     if not user_data[4] and user_data[3] <= 0:
-        await update.message.reply_text(f"❌ No credits!\n⭐ Credits: {user_data[3]}\nContact admin for more.\n\n{DEV_TAG}", parse_mode=ParseMode.MARKDOWN)
+        await update.message.reply_text(f"❌ *Insufficient Credits!*\n⭐ Credits: {user_data[3]}\nContact admin or wait for daily reset.\n\n{DEV_TAG}", parse_mode=ParseMode.MARKDOWN)
         return
     
+    # Send typing indicator
     await update.message.chat.send_action("typing")
+    
+    # Fetch data
     data = await fetch_number_info(mobile)
     
     if data:
+        # Deduct credit
         if not user_data[4]:
             update_credit(user_id, -1)
         
-        response = f"📱 *Number Info*\n*Number:* `{mobile}`\n\n"
-        if isinstance(data, dict):
-            for k, v in data.items():
-                if v:
-                    response += f"┌ *{k.replace('_', ' ').title()}*: {v}\n"
-        else:
-            response += f"┌ {data}\n"
+        # Format response
+        response = format_response(data, mobile)
         
+        # Add credits info
         credits = user_data[3] - 1 if not user_data[4] else "♾️"
-        response += f"\n⭐ Credits: {credits}\n\n{DEV_TAG}"
+        response += f"\n\n⭐ *Credits Left:* {credits}"
+        if user_data[4]:
+            response += " (Premium)"
+        
         await update.message.reply_text(response, parse_mode=ParseMode.MARKDOWN)
     else:
-        await update.message.reply_text(f"❌ API Error! Try again.\n\n{DEV_TAG}", parse_mode=ParseMode.MARKDOWN)
+        await update.message.reply_text(f"❌ *Error fetching data!*\nPlease try again later.\n\n{DEV_TAG}", parse_mode=ParseMode.MARKDOWN)
 
 # ADMIN
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMIN_IDS:
-        await update.message.reply_text("❌ Access Denied!")
+        await update.message.reply_text("❌ *Access Denied!*")
         return
     
     keyboard = [
-        [InlineKeyboardButton("👥 Users", callback_data="admin_users")],
-        [InlineKeyboardButton("📊 Stats", callback_data="admin_stats")]
+        [InlineKeyboardButton("👥 All Users", callback_data="admin_users")],
+        [InlineKeyboardButton("📊 Bot Stats", callback_data="admin_stats")],
+        [InlineKeyboardButton("➕ Add Credits", callback_data="admin_credits")],
+        [InlineKeyboardButton("💎 Premium Management", callback_data="admin_premium")]
     ]
     await update.message.reply_text("🔐 *Admin Panel*", parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(keyboard))
 
@@ -171,29 +270,72 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if query.data == "admin_users":
         users = get_all_users()
-        msg = "👥 *Users*\n\n"
-        for u in users[:10]:
-            msg += f"• {u[2]} (@{u[1] or 'no username'})\n  Credits: {u[3]} | Premium: {'✅' if u[4] else '❌'} | Searches: {u[5]}\n\n"
+        if not users:
+            await query.edit_message_text("❌ No users found!")
+            return
+        msg = "👥 *All Users*\n━━━━━━━━━━━━━━━━━\n"
+        for u in users[:20]:
+            msg += f"• *{u[2]}*\n"
+            msg += f"  ├ ID: `{u[0]}`\n"
+            msg += f"  ├ Credits: {u[3]}\n"
+            msg += f"  ├ Premium: {'✅' if u[4] else '❌'}\n"
+            msg += f"  └ Searches: {u[5]}\n\n"
+        msg += f"━━━━━━━━━━━━━━━━━\nTotal: {len(users)} users\n{DEV_TAG}"
         await query.edit_message_text(msg, parse_mode=ParseMode.MARKDOWN)
+    
     elif query.data == "admin_stats":
         users = get_all_users()
         total = len(users)
         premium = sum(1 for u in users if u[4])
         searches = sum(u[5] for u in users)
-        await query.edit_message_text(f"📊 *Bot Stats*\n👥 Users: {total}\n💎 Premium: {premium}\n🔍 Searches: {searches}\n\n{DEV_TAG}", parse_mode=ParseMode.MARKDOWN)
+        credits = sum(u[3] for u in users)
+        msg = f"""📊 *Bot Statistics* 📊
+━━━━━━━━━━━━━━━━━
+👥 *Total Users:* {total}
+💎 *Premium Users:* {premium}
+🔍 *Total Searches:* {searches}
+⭐ *Total Credits:* {credits}
+━━━━━━━━━━━━━━━━━
+{DEV_TAG}"""
+        await query.edit_message_text(msg, parse_mode=ParseMode.MARKDOWN)
+    
+    elif query.data == "admin_credits":
+        msg = f"""💰 *Add Credits* 💰
+
+Use command:
+`/addcredits [user_id] [amount]`
+
+Example:
+`/addcredits 123456789 10`
+
+{DEV_TAG}"""
+        await query.edit_message_text(msg, parse_mode=ParseMode.MARKDOWN)
+    
+    elif query.data == "admin_premium":
+        msg = f"""💎 *Premium Management* 💎
+
+Use command:
+`/premium [user_id] [on/off]`
+
+Example:
+`/premium 123456789 on`
+`/premium 123456789 off`
+
+{DEV_TAG}"""
+        await query.edit_message_text(msg, parse_mode=ParseMode.MARKDOWN)
 
 async def add_credits(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMIN_IDS:
         return
     args = context.args
     if len(args) != 2:
-        await update.message.reply_text("Usage: `/addcredits user_id amount`", parse_mode=ParseMode.MARKDOWN)
+        await update.message.reply_text("❌ Usage: `/addcredits user_id amount`", parse_mode=ParseMode.MARKDOWN)
         return
     try:
         user_id, amount = int(args[0]), int(args[1])
         if get_user(user_id):
             update_credit(user_id, amount)
-            await update.message.reply_text(f"✅ Added {amount} credits to user {user_id}")
+            await update.message.reply_text(f"✅ *Added {amount} credits* to user `{user_id}`", parse_mode=ParseMode.MARKDOWN)
         else:
             await update.message.reply_text("❌ User not found!")
     except:
@@ -204,16 +346,16 @@ async def premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     args = context.args
     if len(args) != 2:
-        await update.message.reply_text("Usage: `/premium user_id on/off`", parse_mode=ParseMode.MARKDOWN)
+        await update.message.reply_text("❌ Usage: `/premium user_id on/off`", parse_mode=ParseMode.MARKDOWN)
         return
     try:
         user_id, status = int(args[0]), args[1].lower()
         if status == "on":
             set_premium(user_id, 1)
-            await update.message.reply_text(f"✅ Premium enabled for {user_id}")
+            await update.message.reply_text(f"✅ *Premium enabled* for user `{user_id}`", parse_mode=ParseMode.MARKDOWN)
         elif status == "off":
             set_premium(user_id, 0)
-            await update.message.reply_text(f"❌ Premium disabled for {user_id}")
+            await update.message.reply_text(f"❌ *Premium disabled* for user `{user_id}`", parse_mode=ParseMode.MARKDOWN)
         else:
             await update.message.reply_text("❌ Use 'on' or 'off'")
     except:
@@ -232,18 +374,25 @@ async def reset_credits():
 # MAIN
 def main():
     logging.basicConfig(level=logging.INFO)
-    logging.info("🤖 Starting Bot...")
+    logging.info("🤖 Starting Number Info Bot...")
     
     app = Application.builder().token(BOT_TOKEN).build()
     
+    # Commands
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("admin", admin_panel))
     app.add_handler(CommandHandler("addcredits", add_credits))
     app.add_handler(CommandHandler("premium", premium))
-    app.add_handler(CallbackQueryHandler(stats_callback, pattern="stats"))
-    app.add_handler(CallbackQueryHandler(admin_callback, pattern="admin_"))
+    
+    # Callbacks
+    app.add_handler(CallbackQueryHandler(stats_callback, pattern="^stats$"))
+    app.add_handler(CallbackQueryHandler(about_callback, pattern="^about$"))
+    app.add_handler(CallbackQueryHandler(admin_callback, pattern="^admin_"))
+    
+    # Messages
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_number))
     
+    # Daily reset
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     loop.create_task(reset_credits())
