@@ -220,19 +220,14 @@ async def premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Invalid input!")
 
 async def reset_credits():
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("UPDATE users SET credit = 5 WHERE is_premium = 0")
-    conn.commit()
-    conn.close()
-    logging.info("✅ Daily credits reset")
-
-async def daily_reset():
     while True:
-        now = datetime.now()
-        next_day = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0)
-        await asyncio.sleep((next_day - now).total_seconds())
-        await reset_credits()
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("UPDATE users SET credit = 5 WHERE is_premium = 0")
+        conn.commit()
+        conn.close()
+        logging.info("✅ Daily credits reset")
+        await asyncio.sleep(86400)
 
 # MAIN
 def main():
@@ -249,7 +244,9 @@ def main():
     app.add_handler(CallbackQueryHandler(admin_callback, pattern="admin_"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_number))
     
-    asyncio.create_task(daily_reset())
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.create_task(reset_credits())
     
     logging.info("✅ Bot Started Successfully!")
     app.run_polling()
