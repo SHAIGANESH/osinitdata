@@ -1,8 +1,10 @@
 services:
   - type: worker
-    name: telegram-number-info-bot
+    name: telegram-number-bot
     env: python
-    buildCommand: pip install -r requirements.txt
+    buildCommand: |
+      pip install --upgrade pip
+      pip install -r requirements.txt
     startCommand: python bot.py
     envVars:
       - key: BOT_TOKEN
