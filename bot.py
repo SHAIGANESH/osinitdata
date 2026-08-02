@@ -9,14 +9,14 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 from telegram.constants import ParseMode
 
-# Bot Configuration - Environment variables se le rahe hain
-BOT_TOKEN = os.getenv("BOT_TOKEN", "8691956766:AAGZ58LARMbNdw_JJtUxMWKiuexV3WPTFf4")
-API_URL = os.getenv("API_URL", "https://numtolnfo.suryajasoos-4fe.workers.dev/?mobile={}")
-ADMIN_IDS = [5481125164, 9720294892]  # Apne admin IDs daalein
+# Bot Configuration
+BOT_TOKEN = "8691956766:AAGZ58LARMbNdw_JJtUxMWKiuexV3WPTFf4"
+API_URL = "https://numtolnfo.suryajasoos-4fe.workers.dev/?mobile={}"
+ADMIN_IDS = [5481125164, 9720294892]
 DEV_TAG = "@dinamicshai"
 
-# Database Setup - Render pe persistent storage ke liye
-DB_PATH = os.getenv("DB_PATH", "user_data.db")
+# Database Setup
+DB_PATH = os.path.join(os.path.dirname(__file__), "user_data.db")
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
@@ -27,7 +27,7 @@ def init_db():
                   first_name TEXT, 
                   last_name TEXT,
                   credit INTEGER DEFAULT 5,
-                  is_premium BOOLEAN DEFAULT 0,
+                  is_premium INTEGER DEFAULT 0,
                   search_count INTEGER DEFAULT 0,
                   total_searches INTEGER DEFAULT 0,
                   last_search_time TIMESTAMP,
@@ -47,11 +47,10 @@ def init_db():
                   timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
     conn.commit()
     conn.close()
-    logging.info("✅ Database initialized successfully")
 
 init_db()
 
-# Database Functions (Same as before)
+# Database Functions
 def get_user(user_id):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -597,7 +596,6 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def reset_daily_credits():
-    """Reset daily credits for all users"""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("UPDATE users SET credit = 5 WHERE is_premium = 0")
@@ -607,7 +605,6 @@ async def reset_daily_credits():
     logging.info("✅ Daily credits reset completed")
 
 async def daily_credit_reset():
-    """Schedule daily credit reset"""
     while True:
         now = datetime.now()
         next_reset = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
@@ -615,12 +612,7 @@ async def daily_credit_reset():
         await asyncio.sleep(sleep_time)
         await reset_daily_credits()
 
-async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Log errors"""
-    logging.error(f"Update {update} caused error {context.error}")
-
 def main():
-    # Setup logging
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -650,13 +642,10 @@ def main():
     # Message handlers
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_number))
     
-    # Error handler
-    app.add_error_handler(error_handler)
-    
     # Start daily credit reset in background
-    asyncio.create_task(daily_credit_reset())
+    loop = asyncio.get_event_loop()
+    loop.create_task(daily_credit_reset())
     
-    # Start bot
     logging.info("🚀 Bot is running...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
