@@ -1,0 +1,11 @@
+services:
+  - type: worker
+    name: telegram-number-info-bot
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python bot.py
+    envVars:
+      - key: BOT_TOKEN
+        value: 8691956766:AAGZ58LARMbNdw_JJtUxMWKiuexV3WPTFf4
+      - key: API_URL
+        value: https://numtolnfo.suryajasoos-4fe.workers.dev/?mobile={}
