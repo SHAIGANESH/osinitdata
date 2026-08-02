@@ -9,15 +9,17 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 from telegram.constants import ParseMode
 
-# Bot Configuration
-BOT_TOKEN = "8691956766:AAGZ58LARMbNdw_JJtUxMWKiuexV3WPTFf4"
-API_URL = "https://numtolnfo.suryajasoos-4fe.workers.dev/?mobile={}"
-ADMIN_IDS = [5481125164, 9720294892]  # Admin Telegram IDs
+# Bot Configuration - Environment variables se le rahe hain
+BOT_TOKEN = os.getenv("BOT_TOKEN", "8691956766:AAGZ58LARMbNdw_JJtUxMWKiuexV3WPTFf4")
+API_URL = os.getenv("API_URL", "https://numtolnfo.suryajasoos-4fe.workers.dev/?mobile={}")
+ADMIN_IDS = [5481125164, 9720294892]  # Apne admin IDs daalein
 DEV_TAG = "@dinamicshai"
 
-# Database Setup
+# Database Setup - Render pe persistent storage ke liye
+DB_PATH = os.getenv("DB_PATH", "user_data.db")
+
 def init_db():
-    conn = sqlite3.connect('user_data.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS users 
                  (user_id INTEGER PRIMARY KEY, 
@@ -45,12 +47,13 @@ def init_db():
                   timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
     conn.commit()
     conn.close()
+    logging.info("✅ Database initialized successfully")
 
 init_db()
 
-# Database Functions
+# Database Functions (Same as before)
 def get_user(user_id):
-    conn = sqlite3.connect('user_data.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
     user = c.fetchone()
@@ -58,7 +61,7 @@ def get_user(user_id):
     return user
 
 def create_user(user_id, username=None, first_name=None, last_name=None):
-    conn = sqlite3.connect('user_data.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     try:
         c.execute("INSERT INTO users (user_id, username, first_name, last_name, credit) VALUES (?, ?, ?, ?, 5)",
@@ -71,21 +74,21 @@ def create_user(user_id, username=None, first_name=None, last_name=None):
         conn.close()
 
 def update_credit(user_id, amount):
-    conn = sqlite3.connect('user_data.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("UPDATE users SET credit = credit + ? WHERE user_id = ?", (amount, user_id))
     conn.commit()
     conn.close()
 
 def set_premium(user_id, premium_status):
-    conn = sqlite3.connect('user_data.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("UPDATE users SET is_premium = ? WHERE user_id = ?", (premium_status, user_id))
     conn.commit()
     conn.close()
 
 def add_search_history(user_id, mobile):
-    conn = sqlite3.connect('user_data.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("INSERT INTO search_history (user_id, mobile_number) VALUES (?, ?)", (user_id, mobile))
     c.execute("UPDATE users SET search_count = search_count + 1, total_searches = total_searches + 1, last_search_time = CURRENT_TIMESTAMP WHERE user_id = ?", (user_id,))
@@ -93,7 +96,7 @@ def add_search_history(user_id, mobile):
     conn.close()
 
 def get_user_stats(user_id):
-    conn = sqlite3.connect('user_data.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT search_count, total_searches, credit, is_premium, joined_date, last_search_time FROM users WHERE user_id = ?", (user_id,))
     stats = c.fetchone()
@@ -101,7 +104,7 @@ def get_user_stats(user_id):
     return stats
 
 def get_all_users():
-    conn = sqlite3.connect('user_data.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT user_id, username, first_name, last_name, credit, is_premium, total_searches FROM users ORDER BY total_searches DESC")
     users = c.fetchall()
@@ -126,7 +129,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_id = user.id
     
-    # Check if user exists
     if not get_user(user_id):
         create_user(user_id, user.username, user.first_name, user.last_name)
         welcome_msg = f"""🎉 *Welcome to NumberInfo Bot!* 🎉
@@ -276,19 +278,16 @@ async def handle_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     mobile = update.message.text.strip()
     
-    # Validate mobile number
     import re
     if not re.match(r'^\+?\d{10,15}$', mobile):
         await update.message.reply_text("❌ *Invalid mobile number!*\nPlease send a valid 10-15 digit number.\n\nExample: `9720294892`", parse_mode=ParseMode.MARKDOWN)
         return
     
-    # Check user and credits
     user_data = get_user(user_id)
     if not user_data:
         create_user(user_id, update.effective_user.username, update.effective_user.first_name, update.effective_user.last_name)
         user_data = get_user(user_id)
     
-    # Check credits or premium
     if not user_data[4] and user_data[3] <= 0:
         await update.message.reply_text(
             f"❌ *Insufficient Credits!*\n\n"
@@ -300,21 +299,16 @@ async def handle_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
     
-    # Send typing indicator
     await update.message.chat.send_action(action="typing")
     
-    # Fetch API data
     api_data = await fetch_number_info(mobile)
     
     if api_data:
-        # Deduct credit (if not premium)
         if not user_data[4]:
             update_credit(user_id, -1)
         
-        # Save search history
         add_search_history(user_id, mobile)
         
-        # Format response
         response = f"""📱 *Mobile Number Information* 📱
 
 *Number:* `{mobile}`
@@ -322,7 +316,6 @@ async def handle_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
 📊 *Details:*
 """
         
-        # Parse API response (customize based on your API response structure)
         if isinstance(api_data, dict):
             for key, value in api_data.items():
                 if value:
@@ -338,7 +331,6 @@ async def handle_number(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             response += f"┌ {api_data}\n"
         
-        # Add credits info
         remaining_credits = user_data[3] - 1 if not user_data[4] else "♾️"
         response += f"\n*Credits Left:* {remaining_credits} ⭐"
         if user_data[4]:
@@ -427,7 +419,7 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     
     elif action == "admin_stats":
-        conn = sqlite3.connect('user_data.db')
+        conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         c.execute("SELECT COUNT(*) FROM users")
         total_users = c.fetchone()[0]
@@ -449,7 +441,7 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(msg, parse_mode=ParseMode.MARKDOWN)
     
     elif action == "admin_logs":
-        conn = sqlite3.connect('user_data.db')
+        conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         c.execute("SELECT * FROM admin_logs ORDER BY timestamp DESC LIMIT 10")
         logs = c.fetchall()
@@ -493,8 +485,7 @@ async def add_credits(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if get_user(target_user):
         update_credit(target_user, amount)
         
-        # Log admin action
-        conn = sqlite3.connect('user_data.db')
+        conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         c.execute("INSERT INTO admin_logs (admin_id, action, target_user_id, details) VALUES (?, ?, ?, ?)",
                   (user_id, "add_credits", target_user, f"Added {amount} credits"))
@@ -550,8 +541,7 @@ async def manage_premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if get_user(target_user):
         set_premium(target_user, premium_status)
         
-        # Log admin action
-        conn = sqlite3.connect('user_data.db')
+        conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
         c.execute("INSERT INTO admin_logs (admin_id, action, target_user_id, details) VALUES (?, ?, ?, ?)",
                   (user_id, "manage_premium", target_user, action_desc))
@@ -594,7 +584,7 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             await context.bot.send_message(chat_id=user[0], text=f"📢 *Announcement* 📢\n\n{message}\n\n{DEV_TAG}", parse_mode=ParseMode.MARKDOWN)
             sent_count += 1
-            await asyncio.sleep(0.1)  # Rate limit
+            await asyncio.sleep(0.1)
         except Exception as e:
             logging.error(f"Failed to send to {user[0]}: {e}")
     
@@ -608,27 +598,34 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def reset_daily_credits():
     """Reset daily credits for all users"""
-    conn = sqlite3.connect('user_data.db')
+    conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("UPDATE users SET credit = 5 WHERE is_premium = 0")
     c.execute("UPDATE users SET search_count = 0")
     conn.commit()
     conn.close()
-    logging.info("Daily credits reset completed")
+    logging.info("✅ Daily credits reset completed")
 
 async def daily_credit_reset():
     """Schedule daily credit reset"""
     while True:
         now = datetime.now()
-        # Reset at midnight
         next_reset = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
         sleep_time = (next_reset - now).total_seconds()
         await asyncio.sleep(sleep_time)
         await reset_daily_credits()
 
+async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Log errors"""
+    logging.error(f"Update {update} caused error {context.error}")
+
 def main():
     # Setup logging
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    logging.info("🤖 Starting NumberInfo Bot...")
     
     # Create bot application
     app = Application.builder().token(BOT_TOKEN).build()
@@ -653,14 +650,14 @@ def main():
     # Message handlers
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_number))
     
+    # Error handler
+    app.add_error_handler(error_handler)
+    
     # Start daily credit reset in background
     asyncio.create_task(daily_credit_reset())
     
     # Start bot
-    print("🤖 Bot started successfully!")
-    print(f"✅ Admin IDs: {ADMIN_IDS}")
-    print("🚀 Bot is running...")
-    
+    logging.info("🚀 Bot is running...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
